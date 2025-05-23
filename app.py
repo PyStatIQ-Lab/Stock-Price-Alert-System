@@ -13,13 +13,13 @@ CONFIG_FILE = 'stock_alerts_config.json'
 def load_config():
     """Load configuration from JSON file"""
     if not os.path.exists(CONFIG_FILE):
-        # Create default config if file doesn't exist
+        # Create default config with your credentials
         default_config = {
             "stocks_to_monitor": {},
             "email_settings": {
-                "sender_email": "",
-                "sender_password": "",
-                "receiver_email": "",
+                "sender_email": "mukti852@gmail.com",
+                "sender_password": "Singh@123",  # Consider using an app password instead
+                "receiver_email": "support@predictram.com",
                 "smtp_server": "smtp.gmail.com",
                 "smtp_port": 587
             },
@@ -124,10 +124,9 @@ def main():
     st.markdown("""
         Monitor stocks and get email alerts when they break resistance levels
         
-        **For Gmail users:**
-        1. Enable 2-Step Verification in your Google Account
-        2. Create an App Password (https://myaccount.google.com/apppasswords)
-        3. Use the App Password in the email configuration
+        **Important Security Note:** 
+        - For Gmail, we recommend using an App Password instead of your regular password
+        - Go to your Google Account > Security > App Passwords to generate one
         """)
     
     config = load_config()
