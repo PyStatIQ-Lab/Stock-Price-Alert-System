@@ -75,13 +75,14 @@ def send_email_alert(config, ticker, current_price, resistance_level):
         return True
     except smtplib.SMTPAuthenticationError:
         st.error("""
-            Email authentication failed. Possible reasons:
-            1. Incorrect email or password
-            2. For Gmail, you might need to:
-               - Enable 'Less secure app access' OR
-               - Create an App Password (recommended)
-               See app instructions for details
+            Email authentication failed. Please follow these steps:
+            1. Go to https://myaccount.google.com
+            2. Enable 2-Step Verification
+            3. Create an App Password (select 'Mail' application)
+            4. Use the 16-digit app password in this app
             """)
+        st.error("If you need immediate access, you can enable less secure apps at:")
+        st.error("https://myaccount.google.com/lesssecureapps (not recommended)")
     except Exception as e:
         st.error(f"Failed to send email: {str(e)}")
     return False
