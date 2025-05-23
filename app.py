@@ -17,9 +17,9 @@ STOCK_LEVELS = {
 
 # Email configuration
 EMAIL_CONFIG = {
-    'sender_email': 'your_email@gmail.com',
-    'sender_password': 'your_app_password',  # Use app-specific password for Gmail
-    'receiver_email': 'recipient_email@example.com',
+    'sender_email': 'support@predictram.com',
+    'sender_password': 'Singh@54812',  # Use app-specific password for Gmail
+    'receiver_email': 'support@predictram.com',
     'smtp_server': 'smtp.gmail.com',
     'smtp_port': 587
 }
