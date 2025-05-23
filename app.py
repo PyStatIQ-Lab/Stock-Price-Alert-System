@@ -51,6 +51,11 @@ def send_email_alert(config, ticker, current_price, resistance_level):
     """Send email notification when resistance is broken"""
     email_settings = config['email_settings']
     
+    # Validate email settings
+    if not all([email_settings['sender_email'], email_settings['sender_password'], email_settings['receiver_email']]):
+        st.error("Email configuration incomplete. Please check your email settings.")
+        return False
+    
     subject = f"ALERT: {ticker} broke resistance level!"
     body = (f"Stock {ticker} has broken through your resistance level of {resistance_level}.\n"
             f"Current price: {current_price}\n"
@@ -67,15 +72,34 @@ def send_email_alert(config, ticker, current_price, resistance_level):
             server.login(email_settings['sender_email'], email_settings['sender_password'])
             server.send_message(msg)
         st.success(f"Email alert sent for {ticker}")
+        return True
+    except smtplib.SMTPAuthenticationError:
+        st.error("""
+            Email authentication failed. Possible reasons:
+            1. Incorrect email or password
+            2. For Gmail, you might need to:
+               - Enable 'Less secure app access' OR
+               - Create an App Password (recommended)
+               See app instructions for details
+            """)
     except Exception as e:
-        st.error(f"Failed to send email: {e}")
+        st.error(f"Failed to send email: {str(e)}")
+    return False
 
 def check_stocks(config):
     """Check all stocks against their resistance levels"""
     stocks = config.get('stocks_to_monitor', {})
     alerts_sent = []
     
-    for ticker, resistance in stocks.items():
+    if not stocks:
+        st.warning("No stocks to monitor. Add some stocks first.")
+        return
+    
+    progress_bar = st.progress(0)
+    total_stocks = len(stocks)
+    
+    for i, (ticker, resistance) in enumerate(stocks.items(), 1):
+        progress_bar.progress(i / total_stocks)
         current_price = get_current_price(ticker)
         if current_price is None:
             continue
@@ -83,8 +107,8 @@ def check_stocks(config):
         st.write(f"{ticker}: Current price: {current_price}, Resistance: {resistance}")
         
         if current_price >= resistance:
-            send_email_alert(config, ticker, current_price, resistance)
-            alerts_sent.append(ticker)
+            if send_email_alert(config, ticker, current_price, resistance):
+                alerts_sent.append(ticker)
     
     # Remove stocks that triggered alerts (to avoid repeated alerts)
     for ticker in alerts_sent:
@@ -92,11 +116,19 @@ def check_stocks(config):
     
     if alerts_sent:
         save_config(config)
+        time.sleep(2)  # Give time to see the alerts
         st.experimental_rerun()
 
 def main():
     st.title("📈 Stock Price Alert System")
-    st.markdown("Monitor stocks and get email alerts when they break resistance levels")
+    st.markdown("""
+        Monitor stocks and get email alerts when they break resistance levels
+        
+        **For Gmail users:**
+        1. Enable 2-Step Verification in your Google Account
+        2. Create an App Password (https://myaccount.google.com/apppasswords)
+        3. Use the App Password in the email configuration
+        """)
     
     config = load_config()
     
@@ -160,6 +192,7 @@ def main():
                 config['stocks_to_monitor'][new_ticker] = new_resistance
                 save_config(config)
                 st.success(f"Added {new_ticker} with resistance level {new_resistance}")
+                time.sleep(1)
                 st.experimental_rerun()
             else:
                 st.error("Please enter a valid ticker and resistance level")
@@ -175,6 +208,7 @@ def main():
                 del config['stocks_to_monitor'][ticker_to_remove]
                 save_config(config)
                 st.success(f"Removed {ticker_to_remove}")
+                time.sleep(1)
                 st.experimental_rerun()
         else:
             st.info("No stocks to remove")
