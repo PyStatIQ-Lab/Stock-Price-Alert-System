@@ -9,7 +9,7 @@ from tkinter import ttk, messagebox
 
 # Configuration
 STOCK_LEVELS = {
-    'AAPL': 180.00,    # Apple
+    'AAPL': 197.00,    # Apple
     'MSFT': 350.00,    # Microsoft
     'TSLA': 200.00,    # Tesla
     # Add more stocks and resistance levels here
