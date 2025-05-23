@@ -1,159 +1,183 @@
+import streamlit as st
 import yfinance as yf
 import smtplib
 from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import time
+import json
+import os
 from datetime import datetime
-import pytz
-import tkinter as tk
-from tkinter import ttk, messagebox
 
-# Configuration
-STOCK_LEVELS = {
-    'AAPL': 197.00,    # Apple
-    'MSFT': 350.00,    # Microsoft
-    'TSLA': 200.00,    # Tesla
-    # Add more stocks and resistance levels here
-}
+# Configuration file
+CONFIG_FILE = 'stock_alerts_config.json'
 
-# Email configuration
-EMAIL_CONFIG = {
-    'sender_email': 'support@predictram.com',
-    'sender_password': 'Singh@54812',  # Use app-specific password for Gmail
-    'receiver_email': 'support@predictram.com',
-    'smtp_server': 'smtp.gmail.com',
-    'smtp_port': 587
-}
-
-class StockAlertApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Stock Resistance Alert System")
-        self.root.geometry("600x400")
-        
-        # Create GUI elements
-        self.create_widgets()
-        
-        # Initial data
-        self.last_update_time = None
-        self.alerts = []
-        
-    def create_widgets(self):
-        # Frame for controls
-        control_frame = ttk.Frame(self.root, padding="10")
-        control_frame.pack(fill=tk.X)
-        
-        # Refresh button
-        self.refresh_btn = ttk.Button(
-            control_frame, 
-            text="Refresh Stock Prices", 
-            command=self.refresh_stock_prices
-        )
-        self.refresh_btn.pack(side=tk.LEFT)
-        
-        # Last update label
-        self.update_label = ttk.Label(control_frame, text="Last update: Never")
-        self.update_label.pack(side=tk.RIGHT)
-        
-        # Stock data display
-        self.tree = ttk.Treeview(
-            self.root, 
-            columns=('Ticker', 'Current', 'Resistance', 'Status'), 
-            show='headings'
-        )
-        
-        # Configure columns
-        self.tree.heading('Ticker', text='Ticker')
-        self.tree.heading('Current', text='Current Price')
-        self.tree.heading('Resistance', text='Resistance Level')
-        self.tree.heading('Status', text='Status')
-        
-        self.tree.column('Ticker', width=100)
-        self.tree.column('Current', width=100, anchor=tk.E)
-        self.tree.column('Resistance', width=120, anchor=tk.E)
-        self.tree.column('Status', width=150)
-        
-        self.tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Status bar
-        self.status_var = tk.StringVar()
-        self.status_var.set("Ready")
-        status_bar = ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN)
-        status_bar.pack(fill=tk.X, side=tk.BOTTOM)
-        
-    def refresh_stock_prices(self):
-        self.status_var.set("Fetching stock prices...")
-        self.refresh_btn.config(state=tk.DISABLED)
-        self.root.update()
-        
-        self.alerts = []
-        self.tree.delete(*self.tree.get_children())
-        
-        for ticker, resistance in STOCK_LEVELS.items():
-            try:
-                stock = yf.Ticker(ticker)
-                current_price = stock.history(period='1d')['Close'].iloc[-1]
-                
-                if current_price > resistance:
-                    status = "RESISTANCE BROKEN!"
-                    self.alerts.append(f"{ticker} has broken resistance level! Current: {current_price:.2f}, Resistance: {resistance:.2f}")
-                else:
-                    status = "Below resistance"
-                
-                # Add to treeview
-                self.tree.insert('', tk.END, values=(
-                    ticker, 
-                    f"{current_price:.2f}", 
-                    f"{resistance:.2f}", 
-                    status
-                ))
-                
-            except Exception as e:
-                self.tree.insert('', tk.END, values=(
-                    ticker, 
-                    "Error", 
-                    f"{resistance:.2f}", 
-                    str(e)
-                ))
-        
-        # Update last refresh time
-        self.last_update_time = datetime.now(pytz.timezone('Asia/Kolkata'))
-        self.update_label.config(text=f"Last update: {self.last_update_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        
-        # Send alerts if any
-        if self.alerts:
-            self.send_alert_email(self.alerts)
-            messagebox.showinfo(
-                "Alerts Sent", 
-                f"{len(self.alerts)} resistance levels broken!\nEmail notification sent."
-            )
-        
-        self.status_var.set("Ready")
-        self.refresh_btn.config(state=tk.NORMAL)
+def load_config():
+    """Load configuration from JSON file"""
+    if not os.path.exists(CONFIG_FILE):
+        # Create default config if file doesn't exist
+        default_config = {
+            "stocks_to_monitor": {},
+            "email_settings": {
+                "sender_email": "",
+                "sender_password": "",
+                "receiver_email": "",
+                "smtp_server": "smtp.gmail.com",
+                "smtp_port": 587
+            },
+            "check_interval": 60  # seconds
+        }
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(default_config, f, indent=4)
+        return default_config
     
-    def send_alert_email(self, alerts):
-        try:
-            msg = MIMEMultipart()
-            msg['From'] = EMAIL_CONFIG['sender_email']
-            msg['To'] = EMAIL_CONFIG['receiver_email']
-            msg['Subject'] = f"Stock Alert: {len(alerts)} Resistance Levels Broken"
-            
-            body = "The following stocks have broken their resistance levels:\n\n"
-            body += "\n".join(alerts)
-            body += "\n\nChecked at: " + self.last_update_time.strftime("%Y-%m-%d %H:%M:%S")
-            
-            msg.attach(MIMEText(body, 'plain'))
-            
-            server = smtplib.SMTP(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port'])
+    with open(CONFIG_FILE) as f:
+        return json.load(f)
+
+def save_config(config):
+    """Save configuration to JSON file"""
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f, indent=4)
+
+def get_current_price(ticker):
+    """Get current price of a stock using yfinance"""
+    try:
+        stock = yf.Ticker(ticker)
+        data = stock.history(period='1d')
+        return data['Close'].iloc[-1]
+    except Exception as e:
+        st.error(f"Error getting price for {ticker}: {e}")
+        return None
+
+def send_email_alert(config, ticker, current_price, resistance_level):
+    """Send email notification when resistance is broken"""
+    email_settings = config['email_settings']
+    
+    subject = f"ALERT: {ticker} broke resistance level!"
+    body = (f"Stock {ticker} has broken through your resistance level of {resistance_level}.\n"
+            f"Current price: {current_price}\n"
+            f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    msg = MIMEText(body)
+    msg['Subject'] = subject
+    msg['From'] = email_settings['sender_email']
+    msg['To'] = email_settings['receiver_email']
+    
+    try:
+        with smtplib.SMTP(email_settings['smtp_server'], email_settings['smtp_port']) as server:
             server.starttls()
-            server.login(EMAIL_CONFIG['sender_email'], EMAIL_CONFIG['sender_password'])
+            server.login(email_settings['sender_email'], email_settings['sender_password'])
             server.send_message(msg)
-            server.quit()
+        st.success(f"Email alert sent for {ticker}")
+    except Exception as e:
+        st.error(f"Failed to send email: {e}")
+
+def check_stocks(config):
+    """Check all stocks against their resistance levels"""
+    stocks = config.get('stocks_to_monitor', {})
+    alerts_sent = []
+    
+    for ticker, resistance in stocks.items():
+        current_price = get_current_price(ticker)
+        if current_price is None:
+            continue
             
-            print("Alert email sent successfully")
-        except Exception as e:
-            messagebox.showerror("Email Error", f"Failed to send email: {str(e)}")
+        st.write(f"{ticker}: Current price: {current_price}, Resistance: {resistance}")
+        
+        if current_price >= resistance:
+            send_email_alert(config, ticker, current_price, resistance)
+            alerts_sent.append(ticker)
+    
+    # Remove stocks that triggered alerts (to avoid repeated alerts)
+    for ticker in alerts_sent:
+        del config['stocks_to_monitor'][ticker]
+    
+    if alerts_sent:
+        save_config(config)
+        st.experimental_rerun()
+
+def main():
+    st.title("📈 Stock Price Alert System")
+    st.markdown("Monitor stocks and get email alerts when they break resistance levels")
+    
+    config = load_config()
+    
+    # Sidebar for configuration
+    with st.sidebar:
+        st.header("Configuration")
+        
+        # Email settings
+        st.subheader("Email Settings")
+        sender_email = st.text_input("Sender Email", value=config['email_settings']['sender_email'])
+        sender_password = st.text_input("Sender Password", type="password", value=config['email_settings']['sender_password'])
+        receiver_email = st.text_input("Receiver Email", value=config['email_settings']['receiver_email'])
+        smtp_server = st.text_input("SMTP Server", value=config['email_settings']['smtp_server'])
+        smtp_port = st.number_input("SMTP Port", value=config['email_settings']['smtp_port'])
+        
+        # Check interval
+        check_interval = st.number_input("Check Interval (seconds)", min_value=10, value=config['check_interval'])
+        
+        # Save config button
+        if st.button("Save Configuration"):
+            config['email_settings'] = {
+                "sender_email": sender_email,
+                "sender_password": sender_password,
+                "receiver_email": receiver_email,
+                "smtp_server": smtp_server,
+                "smtp_port": smtp_port
+            }
+            config['check_interval'] = check_interval
+            save_config(config)
+            st.success("Configuration saved!")
+    
+    # Main content
+    tab1, tab2 = st.tabs(["Monitor Stocks", "Add/Remove Stocks"])
+    
+    with tab1:
+        st.header("Stock Monitoring")
+        
+        if st.button("Check Prices Now"):
+            check_stocks(config)
+        
+        if config['stocks_to_monitor']:
+            st.subheader("Currently Monitoring")
+            for ticker, resistance in config['stocks_to_monitor'].items():
+                st.write(f"- {ticker}: Resistance at {resistance}")
+        else:
+            st.warning("No stocks being monitored. Add some in the 'Add/Remove Stocks' tab.")
+    
+    with tab2:
+        st.header("Manage Stocks")
+        
+        # Add stock
+        st.subheader("Add Stock")
+        col1, col2 = st.columns(2)
+        with col1:
+            new_ticker = st.text_input("Stock Ticker (e.g., AAPL)").upper()
+        with col2:
+            new_resistance = st.number_input("Resistance Level", min_value=0.0, step=0.1)
+        
+        if st.button("Add Stock"):
+            if new_ticker and new_resistance > 0:
+                config['stocks_to_monitor'][new_ticker] = new_resistance
+                save_config(config)
+                st.success(f"Added {new_ticker} with resistance level {new_resistance}")
+                st.experimental_rerun()
+            else:
+                st.error("Please enter a valid ticker and resistance level")
+        
+        # Remove stock
+        st.subheader("Remove Stock")
+        if config['stocks_to_monitor']:
+            ticker_to_remove = st.selectbox(
+                "Select stock to remove",
+                options=list(config['stocks_to_monitor'].keys())
+            )
+            if st.button("Remove Selected Stock"):
+                del config['stocks_to_monitor'][ticker_to_remove]
+                save_config(config)
+                st.success(f"Removed {ticker_to_remove}")
+                st.experimental_rerun()
+        else:
+            st.info("No stocks to remove")
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = StockAlertApp(root)
-    root.mainloop()
+    main()
